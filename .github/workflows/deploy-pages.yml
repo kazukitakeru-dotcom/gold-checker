@@ -3,6 +3,11 @@ name: GitHub Pages へ公開
 on:
   push:
     branches: [main]
+  # 価格データの更新コミットは GITHUB_TOKEN による push なので、
+  # push イベントでは公開が走らない。更新ワークフローの完了を受けて公開する。
+  workflow_run:
+    workflows: ['金価格データの自動更新']
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -12,12 +17,16 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
     name: 静的サイトを公開
     runs-on: ubuntu-latest
+    # 更新ワークフローが失敗した場合は公開しない。
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -25,6 +34,10 @@ jobs:
     steps:
       - name: リポジトリを取得
         uses: actions/checkout@v7
+        with:
+          # workflow_run では github.sha が更新ワークフロー開始時点の
+          # コミットを指すため、明示的に main の最新を取得する。
+          ref: main
 
       - name: Pages の設定を読み込む
         uses: actions/configure-pages@v6
