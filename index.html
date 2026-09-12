@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>金価格チェッカー</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0f1115">
+<meta name="description" content="今の金価格が2026年2月20日と比べてどうか、そして過去の価格帯の中で高値圏かどうかを一目で確認できるアプリ。">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="金価格">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="app-bar">
+    <div class="app-bar__title">
+      <span class="app-bar__mark" aria-hidden="true">金</span>
+      <span>金価格チェッカー</span>
+    </div>
+    <button type="button" id="refresh-button" class="icon-button" aria-label="データを再読み込み">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+    </button>
+  </header>
+
+  <main class="main" id="main">
+
+    <div class="banner" id="status-banner" role="status" hidden></div>
+
+    <!-- 1. 現在価格 -->
+    <section class="card hero" aria-labelledby="hero-label">
+      <p class="hero__label" id="hero-label">
+        現在の金価格
+        <span class="chip" id="hero-type">店頭小売価格（税込）</span>
+      </p>
+      <p class="hero__price">
+        <span class="hero__value" id="current-price">----</span><span class="hero__unit">円/g</span>
+      </p>
+      <p class="hero__change" id="current-change"></p>
+      <div class="hero__foot">
+        <div class="hero__buy">
+          <span>店頭買取価格（税込）</span>
+          <b id="current-buy">----</b><span class="hero__unit-small">円/g</span>
+        </div>
+        <p class="hero__meta" id="current-meta">読み込み中…</p>
+      </div>
+    </section>
+
+    <!-- 2. 基準日との比較 -->
+    <section class="card baseline" aria-labelledby="baseline-title">
+      <h2 class="card__title" id="baseline-title">基準日との比較</h2>
+      <div class="baseline__row">
+        <div class="baseline__cell">
+          <span class="baseline__key" id="baseline-date-label">2026/2/20</span>
+          <b class="baseline__val" id="baseline-price">----</b>
+          <span class="baseline__unit">円/g</span>
+        </div>
+        <div class="baseline__arrow" aria-hidden="true">→</div>
+        <div class="baseline__cell">
+          <span class="baseline__key">現在</span>
+          <b class="baseline__val" id="baseline-current">----</b>
+          <span class="baseline__unit">円/g</span>
+        </div>
+      </div>
+      <div class="delta" id="baseline-delta">
+        <b class="delta__amount" id="baseline-diff">--</b>
+        <span class="delta__rate" id="baseline-rate">--</span>
+      </div>
+      <p class="card__note" id="baseline-note"></p>
+    </section>
+
+    <!-- 3. 価格位置 -->
+    <section class="card rank" aria-labelledby="rank-title">
+      <div class="card__head">
+        <h2 class="card__title" id="rank-title">現在の価格位置</h2>
+      </div>
+      <div class="seg" id="rank-periods" role="tablist" aria-label="価格位置の集計期間"></div>
+
+      <div class="rank__main">
+        <div class="rank__figure">
+          <span class="rank__prefix">上位</span>
+          <b class="rank__value" id="rank-top">--</b>
+          <span class="rank__suffix">%</span>
+        </div>
+        <span class="badge" id="rank-badge">判定中</span>
+      </div>
+
+      <div class="rank__bar" aria-hidden="true">
+        <div class="rank__bar-track"></div>
+        <div class="rank__bar-marker" id="rank-marker"></div>
+      </div>
+      <div class="rank__bar-legend" aria-hidden="true">
+        <span>安い</span><span>標準</span><span>高い</span>
+      </div>
+
+      <p class="rank__sentence" id="rank-sentence"></p>
+
+      <dl class="stats" id="rank-stats"></dl>
+      <p class="card__note" id="rank-note"></p>
+    </section>
+
+    <!-- 4. チャート -->
+    <section class="card chart" aria-labelledby="chart-title">
+      <div class="card__head">
+        <h2 class="card__title" id="chart-title">価格推移</h2>
+        <label class="select">
+          <span class="visually-hidden">表示する価格の種類</span>
+          <select id="series-select"></select>
+        </label>
+      </div>
+      <div class="seg" id="chart-periods" role="tablist" aria-label="チャートの期間"></div>
+      <div class="chart__wrap">
+        <svg id="chart" viewBox="0 0 360 210" preserveAspectRatio="xMidYMid meet" role="img" aria-label="金価格の推移グラフ"></svg>
+        <div class="chart__tip" id="chart-tip" hidden></div>
+      </div>
+      <div class="chart__legend">
+        <span class="legend-item"><i class="legend-swatch legend-swatch--line"></i>価格</span>
+        <span class="legend-item"><i class="legend-swatch legend-swatch--base"></i>基準日 <span id="legend-base-date">2026/2/20</span></span>
+      </div>
+      <p class="card__note" id="chart-note"></p>
+    </section>
+
+    <!-- 5. 純度・重量計算 -->
+    <section class="card calc" aria-labelledby="calc-title">
+      <h2 class="card__title" id="calc-title">純度・重量から理論価格を計算</h2>
+      <div class="calc__fields">
+        <label class="field">
+          <span class="field__label">純度</span>
+          <select id="calc-purity"></select>
+        </label>
+        <label class="field">
+          <span class="field__label">重量</span>
+          <span class="field__input">
+            <input id="calc-weight" type="number" inputmode="decimal" min="0" step="0.1" value="10">
+            <span class="field__suffix">g</span>
+          </span>
+        </label>
+        <label class="field field--wide">
+          <span class="field__label">計算に使う価格</span>
+          <select id="calc-base"></select>
+        </label>
+      </div>
+      <p class="calc__result">
+        <b id="calc-result">--</b><span class="calc__unit">円</span>
+      </p>
+      <p class="calc__formula" id="calc-formula"></p>
+      <p class="card__note card__note--warn">
+        これは金の含有量から求めた理論価格です。実際の買取価格ではありません。
+        買取手数料、業者ごとの価格差、製品としての価値、石やその他金属の重量は考慮していません。
+      </p>
+    </section>
+
+    <!-- 6. データの出典 -->
+    <section class="card sources" aria-labelledby="sources-title">
+      <h2 class="card__title" id="sources-title">データについて</h2>
+      <dl class="sources__list" id="sources-list"></dl>
+      <p class="card__note">
+        店頭小売価格・店頭買取価格は消費税込みの店頭価格です。市場価格は LBMA の公式建値を
+        ECB の日次参照為替で円換算した税抜の理論価格で、店頭価格とは別物です。
+      </p>
+    </section>
+
+    <footer class="foot">
+      <p>表示は情報提供のみを目的としたもので、売買の判断は自己責任でお願いします。</p>
+      <p class="foot__version" id="app-version"></p>
+    </footer>
+
+  </main>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
