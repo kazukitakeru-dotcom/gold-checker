@@ -19,12 +19,28 @@ const CONFIG = {
      topPercent = 集計期間のうち「現在価格より高かった日」の割合（%）。
      値が小さいほど現在価格が高い。上から順に評価し、最初に一致したものを使う。 */
   rankThresholds: [
-    { maxTopPercent: 10,  key: 'very-high', label: '非常に高い' },
-    { maxTopPercent: 25,  key: 'high',      label: '高値圏' },
-    { maxTopPercent: 75,  key: 'normal',    label: '標準' },
-    { maxTopPercent: 90,  key: 'low',       label: '安値圏' },
-    { maxTopPercent: 100, key: 'very-low',  label: '非常に安い' }
+    { maxTopPercent: 5,   key: 'ceiling', label: '天井', icon: '▲' },
+    { maxTopPercent: 25,  key: 'high',    label: '高値', icon: '▲' },
+    { maxTopPercent: 75,  key: 'average', label: '平均', icon: '' },
+    { maxTopPercent: 95,  key: 'low',     label: '安値', icon: '▼' },
+    { maxTopPercent: 100, key: 'bottom',  label: '底値', icon: '▼' }
   ],
+
+  /* 割合ではなく「期間中の最高値・最安値を更新したか」で判定する 2 段階。
+     しきい値より優先して評価する。 */
+  rankExtremes: {
+    breakout: {
+      key: 'breakout', label: '天井突破', icon: '▲▲', extreme: true,
+      description: '期間中の最高値を更新しています'
+    },
+    floorbreak: {
+      key: 'floorbreak', label: '床抜け', icon: '▼▼', extreme: true,
+      description: '期間中の最安値を更新しています'
+    }
+  },
+
+  /* データ不足で判定できないとき。 */
+  rankUnknown: { key: 'unknown', label: 'データ不足', icon: '', extreme: false },
 
   /* 期間の定義。days が null なら全期間。 */
   periods: {
@@ -308,11 +324,41 @@ function analyse(points, price) {
   };
 }
 
-function judge(topPercent) {
+/**
+ * 7 段階の判定。
+ * 期間中の最高値以上なら天井突破、最安値以下なら床抜けを優先し、
+ * それ以外は topPercent のしきい値で決める。
+ */
+function judge(result, price) {
+  if (price >= result.max) return CONFIG.rankExtremes.breakout;
+  if (price <= result.min) return CONFIG.rankExtremes.floorbreak;
   for (const threshold of CONFIG.rankThresholds) {
-    if (topPercent <= threshold.maxTopPercent) return threshold;
+    if (result.topPercent <= threshold.maxTopPercent) return threshold;
   }
   return CONFIG.rankThresholds[CONFIG.rankThresholds.length - 1];
+}
+
+/** 判定に応じて、価格位置カードと現在価格の色・演出を切り替える。 */
+function applyLevel(verdict) {
+  const extreme = Boolean(verdict.extreme);
+
+  const rankCard = document.querySelector('.rank');
+  rankCard.dataset.level = verdict.key;
+
+  const badgeEl = $('rank-badge');
+  badgeEl.innerHTML = (verdict.icon ? '<span class="badge__icon" aria-hidden="true">' + verdict.icon + '</span>' : '') +
+    escapeHtml(verdict.label);
+  badgeEl.classList.toggle('is-extreme', extreme);
+  $('rank-top').classList.toggle('is-extreme', extreme);
+
+  // 現在価格: 平均・判定不能のときは本来の金色のまま、それ以外は判定色に連動させる。
+  const hero = document.querySelector('.hero');
+  if (verdict.key === 'average' || verdict.key === 'unknown') {
+    delete hero.dataset.level;
+  } else {
+    hero.dataset.level = verdict.key;
+  }
+  $('current-price').classList.toggle('is-extreme', extreme);
 }
 
 /* ---------------------------------------------------------------------
@@ -475,9 +521,7 @@ function renderRank() {
 
   if (!result) {
     valueEl.textContent = '--';
-    valueEl.className = 'rank__value tone--unknown';
-    badgeEl.textContent = 'データ不足';
-    badgeEl.className = 'badge badge--unknown';
+    applyLevel(CONFIG.rankUnknown);
     markerEl.style.left = '50%';
     $('rank-sentence').textContent =
       '判定に必要なデータがまだ足りません（' + points.length + ' 日分 / 最低 ' +
@@ -487,18 +531,20 @@ function renderRank() {
     return;
   }
 
-  const verdict = judge(result.topPercent);
+  const verdict = judge(result, price);
   const topRounded = result.topPercent < 1 && result.topPercent > 0
     ? result.topPercent.toFixed(1)
     : Math.round(result.topPercent);
 
   valueEl.textContent = topRounded;
-  valueEl.className = 'rank__value tone--' + verdict.key;
-  badgeEl.textContent = verdict.label;
-  badgeEl.className = 'badge badge--' + verdict.key;
+  applyLevel(verdict);
   markerEl.style.left = Math.min(100, Math.max(0, result.percentile)) + '%';
 
   $('rank-sentence').innerHTML =
+    (verdict.extreme
+      ? '<span class="rank__alert">' + escapeHtml(verdict.icon + ' 過去' + periodLabel + 'の' +
+          (verdict.key === 'breakout' ? '最高値' : '最安値') + 'を更新しています') + '</span>'
+      : '') +
     '過去' + escapeHtml(periodLabel) + '（' + escapeHtml(formatDate(result.from)) + '〜' +
     escapeHtml(formatDate(result.to)) + '・<b>' + result.count + '</b>営業日）のうち、' +
     '現在価格より高かった日は <b>' + escapeHtml(String(topRounded)) + '%</b>（' +
@@ -524,7 +570,10 @@ function renderRank() {
   if (resolved.partial) {
     notes.push('データは ' + formatDate(result.from) + ' 以降しかないため、期間全体はカバーしていません。');
   }
-  notes.push('判定基準：上位10%以内=非常に高い / 25%以内=高値圏 / 75%以内=標準 / 90%以内=安値圏 / それ以外=非常に安い');
+  const thresholdText = CONFIG.rankThresholds.map((t, i, all) =>
+    (i === all.length - 1 ? 'それ以外' : '上位' + t.maxTopPercent + '%以内') + '=' + t.label
+  ).join(' / ');
+  notes.push('判定基準：期間最高値以上=天井突破 / ' + thresholdText + ' / 期間最安値以下=床抜け');
   $('rank-note').textContent = notes.join(' ');
 }
 

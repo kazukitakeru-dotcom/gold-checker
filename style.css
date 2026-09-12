@@ -23,11 +23,14 @@
   --up: #ff6f61;
   --down: #4cc2ff;
 
-  --very-high: #ff6f61;
-  --high: #ffa23a;
-  --normal: #9aa3b2;
-  --low: #58c3ff;
-  --very-low: #3aa0ff;
+  /* 価格位置 7 段階の色（高い順） */
+  --lv-breakout: #ff4d3d;
+  --lv-ceiling: #ff7a5c;
+  --lv-high: #ffa23a;
+  --lv-average: #9aa3b2;
+  --lv-low: #5bbcff;
+  --lv-bottom: #3f8fff;
+  --lv-floorbreak: #8b7cff;
 
   --radius: 16px;
   --radius-sm: 10px;
@@ -208,8 +211,14 @@ body {
 
 .hero {
   background:
-    radial-gradient(120% 130% at 100% 0%, rgba(232, 182, 71, 0.14), transparent 62%),
+    radial-gradient(120% 130% at 100% 0%, var(--lv-bg, rgba(232, 182, 71, 0.14)), transparent 62%),
     var(--surface);
+  transition: border-color 0.4s ease;
+}
+
+.hero[data-level="breakout"],
+.hero[data-level="floorbreak"] {
+  border-color: var(--lv-line);
 }
 
 .hero__label {
@@ -245,6 +254,13 @@ body {
   letter-spacing: -0.02em;
   color: var(--gold-bright);
   font-variant-numeric: tabular-nums;
+  transition: color 0.4s ease;
+}
+
+.hero[data-level] .hero__value { color: var(--lv-ink); }
+
+.hero__value.is-extreme {
+  animation: levelTextGlow 1.8s ease-in-out infinite;
 }
 
 .hero__unit { font-size: 15px; font-weight: 600; color: var(--text-muted); }
@@ -401,27 +417,108 @@ body {
 }
 .rank__suffix { font-size: 18px; font-weight: 700; color: var(--text-muted); }
 
+/* 判定ごとの色。data-level を持つ要素の子孫はこの変数で色を決める。
+   --lv: 基本色 / --lv-ink: 文字色 / --lv-bg: 背景の淡い色 / --lv-line: 枠線 */
+[data-level="breakout"]   { --lv: var(--lv-breakout);   --lv-ink: #ff9b8d; --lv-bg: rgba(255, 77, 61, 0.22);   --lv-line: rgba(255, 77, 61, 0.55); }
+[data-level="ceiling"]    { --lv: var(--lv-ceiling);    --lv-ink: #ffa693; --lv-bg: rgba(255, 122, 92, 0.17);  --lv-line: rgba(255, 122, 92, 0.4); }
+[data-level="high"]       { --lv: var(--lv-high);       --lv-ink: #ffc078; --lv-bg: rgba(255, 162, 58, 0.16);  --lv-line: rgba(255, 162, 58, 0.35); }
+[data-level="average"]    { --lv: var(--lv-average);    --lv-ink: #c9d0db; --lv-bg: rgba(154, 163, 178, 0.14); --lv-line: rgba(154, 163, 178, 0.3); }
+[data-level="low"]        { --lv: var(--lv-low);        --lv-ink: #8ed3ff; --lv-bg: rgba(91, 188, 255, 0.16);  --lv-line: rgba(91, 188, 255, 0.35); }
+[data-level="bottom"]     { --lv: var(--lv-bottom);     --lv-ink: #86b6ff; --lv-bg: rgba(63, 143, 255, 0.18);  --lv-line: rgba(63, 143, 255, 0.4); }
+[data-level="floorbreak"] { --lv: var(--lv-floorbreak); --lv-ink: #b9afff; --lv-bg: rgba(139, 124, 255, 0.24); --lv-line: rgba(139, 124, 255, 0.6); }
+[data-level="unknown"]    { --lv: #6f7889;              --lv-ink: #6f7889; --lv-bg: var(--surface-2);          --lv-line: var(--line); }
+
 .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 7px 14px;
+  border: 1px solid var(--lv-line, var(--line));
   border-radius: 999px;
-  font-size: 14px;
-  font-weight: 700;
+  background: var(--lv-bg, var(--surface-2));
+  color: var(--lv-ink, var(--text-dim));
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
   white-space: nowrap;
+  transition: background 0.4s ease, color 0.4s ease, border-color 0.4s ease;
 }
 
-.badge--very-high { background: rgba(255, 111, 97, 0.18); color: var(--very-high); }
-.badge--high      { background: rgba(255, 162, 58, 0.18); color: var(--high); }
-.badge--normal    { background: rgba(154, 163, 178, 0.16); color: #c3cad6; }
-.badge--low       { background: rgba(88, 195, 255, 0.16); color: var(--low); }
-.badge--very-low  { background: rgba(58, 160, 255, 0.2); color: var(--very-low); }
-.badge--unknown   { background: var(--surface-2); color: var(--text-dim); }
+.badge__icon {
+  font-size: 10px;
+  letter-spacing: -0.12em;
+  line-height: 1;
+}
 
-.rank__value.tone--very-high { color: var(--very-high); }
-.rank__value.tone--high      { color: var(--high); }
-.rank__value.tone--normal    { color: var(--text); }
-.rank__value.tone--low       { color: var(--low); }
-.rank__value.tone--very-low  { color: var(--very-low); }
-.rank__value.tone--unknown   { color: var(--text-dim); }
+/* 天井突破・床抜け: グラデーション背景と脈動する発光 */
+.badge.is-extreme {
+  padding: 8px 16px;
+  border-color: var(--lv);
+  background:
+    linear-gradient(135deg, var(--lv-bg), rgba(255, 255, 255, 0.04) 60%, var(--lv-bg)),
+    var(--surface);
+  color: #fff;
+  text-shadow: 0 0 10px var(--lv);
+  animation: levelPulse 1.8s ease-in-out infinite;
+}
+
+.rank[data-level="breakout"] .badge.is-extreme {
+  background:
+    linear-gradient(135deg, rgba(255, 77, 61, 0.45), rgba(255, 190, 90, 0.28)),
+    var(--surface);
+}
+
+.rank[data-level="floorbreak"] .badge.is-extreme {
+  background:
+    linear-gradient(135deg, rgba(139, 124, 255, 0.45), rgba(63, 143, 255, 0.28)),
+    var(--surface);
+}
+
+.rank__value {
+  color: var(--lv-ink, var(--text));
+  transition: color 0.4s ease;
+}
+
+.rank__value.is-extreme {
+  animation: levelTextGlow 1.8s ease-in-out infinite;
+}
+
+/* カード全体にも判定色をうっすら乗せる */
+.rank[data-level] {
+  background:
+    radial-gradient(110% 90% at 100% 0%, var(--lv-bg), transparent 55%),
+    var(--surface);
+  transition: border-color 0.4s ease;
+}
+
+.rank[data-level="breakout"],
+.rank[data-level="floorbreak"] {
+  border-color: var(--lv-line);
+  animation: levelCardGlow 1.8s ease-in-out infinite;
+}
+
+.rank__alert {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--lv-ink);
+}
+
+@keyframes levelPulse {
+  0%, 100% { box-shadow: 0 0 10px -3px var(--lv); }
+  50%      { box-shadow: 0 0 22px 2px var(--lv); }
+}
+
+@keyframes levelTextGlow {
+  0%, 100% { text-shadow: 0 0 8px transparent; }
+  50%      { text-shadow: 0 0 20px var(--lv); }
+}
+
+@keyframes levelCardGlow {
+  0%, 100% { box-shadow: var(--shadow), 0 0 0 0 transparent; }
+  50%      { box-shadow: var(--shadow), 0 0 26px -6px var(--lv); }
+}
 
 .rank__bar { position: relative; height: 10px; margin-top: 16px; }
 
@@ -429,30 +526,48 @@ body {
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  background: linear-gradient(90deg, #2f6fb0 0%, #3f7fa8 22%, #4a5666 50%, #b8873a 78%, #e05a4c 100%);
-  opacity: 0.85;
+  /* 左ほど安い（床抜け）→ 右ほど高い（天井突破）。区切りはしきい値に合わせている。 */
+  background: linear-gradient(90deg,
+    var(--lv-floorbreak) 0%,
+    var(--lv-bottom) 5%,
+    var(--lv-low) 25%,
+    var(--lv-average) 50%,
+    var(--lv-high) 75%,
+    var(--lv-ceiling) 95%,
+    var(--lv-breakout) 100%);
+  opacity: 0.8;
 }
 
 .rank__bar-marker {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 14px; height: 14px;
-  margin: -7px 0 0 -7px;
+  width: 16px; height: 16px;
+  margin: -8px 0 0 -8px;
   border: 3px solid var(--surface);
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 0 10px 1px var(--lv, transparent);
   transition: left 0.3s cubic-bezier(0.3, 0.8, 0.4, 1);
+}
+
+.rank[data-level="breakout"] .rank__bar-marker,
+.rank[data-level="floorbreak"] .rank__bar-marker {
+  background: var(--lv-ink);
+  animation: levelPulse 1.8s ease-in-out infinite;
 }
 
 .rank__bar-legend {
   display: flex;
   justify-content: space-between;
-  margin-top: 6px;
-  font-size: 10px;
+  margin-top: 7px;
+  font-size: 9.5px;
+  letter-spacing: -0.02em;
   color: var(--text-dim);
 }
+
+.rank__bar-legend span:first-child { color: var(--lv-floorbreak); }
+.rank__bar-legend span:last-child { color: var(--lv-breakout); }
 
 .rank__sentence {
   margin: 14px 0 0;
