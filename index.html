@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0f1115">
-<meta name="description" content="今の金価格が2026年2月20日と比べてどうか、そして過去の価格帯の中で高値圏かどうかを一目で確認できるアプリ。">
+<meta name="description" content="今の金価格が自分で決めた基準日と比べてどうか、そして過去の価格帯の中でどのあたりかを一目で確認できるアプリ。">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -53,10 +53,17 @@
 
     <!-- 2. 基準日との比較 -->
     <section class="card baseline" aria-labelledby="baseline-title">
-      <h2 class="card__title" id="baseline-title">基準日との比較</h2>
+      <div class="card__head">
+        <h2 class="card__title" id="baseline-title">基準日との比較</h2>
+        <label class="date-field">
+          <span class="visually-hidden">基準日を選ぶ</span>
+          <input type="date" id="baseline-input">
+        </label>
+      </div>
+      <div class="seg seg--compact" id="baseline-presets"></div>
       <div class="baseline__row">
         <div class="baseline__cell">
-          <span class="baseline__key" id="baseline-date-label">2026/2/20</span>
+          <span class="baseline__key" id="baseline-date-label">----</span>
           <b class="baseline__val" id="baseline-price">----</b>
           <span class="baseline__unit">円/g</span>
         </div>
@@ -120,7 +127,7 @@
       </div>
       <div class="chart__legend">
         <span class="legend-item"><i class="legend-swatch legend-swatch--line"></i>価格</span>
-        <span class="legend-item"><i class="legend-swatch legend-swatch--base"></i>基準日 <span id="legend-base-date">2026/2/20</span></span>
+        <span class="legend-item"><i class="legend-swatch legend-swatch--base"></i>基準日 <span id="legend-base-date">--</span></span>
       </div>
       <p class="card__note" id="chart-note"></p>
     </section>

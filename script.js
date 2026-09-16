@@ -77,7 +77,21 @@ const CONFIG = {
 
   /* 選択中の系列が期間をこの割合以上カバーしていれば、そのまま使う。
      下回ったときだけ、より長い履歴のある市場価格系列へ切り替える。 */
-  seriesCoverageTolerance: 0.85
+  seriesCoverageTolerance: 0.85,
+
+  /* 基準日はユーザーが画面から自由に選ぶ。選択内容はこの端末にだけ保存する。 */
+  baselineStorageKey: 'gold-checker.baselineDate',
+
+  /* まだ何も選ばれていないときに使う既定の基準日（最新データから遡る日数）。 */
+  defaultBaselineDays: 365,
+
+  /* 基準日のクイック選択。 */
+  baselinePresets: [
+    { label: '1か月前', days: 31 },
+    { label: '3か月前', days: 92 },
+    { label: '6か月前', days: 183 },
+    { label: '1年前', days: 365 }
+  ]
 };
 
 /* ---------------------------------------------------------------------
@@ -87,7 +101,7 @@ const CONFIG = {
 const state = {
   latest: null,
   history: null,
-  baseline: null,
+  baselineDate: null,
   fromCache: false,
   seriesId: 'retail',
   rankPeriodId: '1y',
@@ -180,14 +194,12 @@ async function loadJson(name) {
 
 async function loadAll() {
   state.fromCache = false;
-  const [latest, history, baseline] = await Promise.all([
+  const [latest, history] = await Promise.all([
     loadJson('latest.json'),
-    loadJson('history.json'),
-    loadJson('baseline.json').catch(() => null)
+    loadJson('history.json')
   ]);
   state.latest = latest;
   state.history = history;
-  state.baseline = baseline;
 }
 
 /* ---------------------------------------------------------------------
@@ -462,45 +474,137 @@ function renderHero() {
    描画: 基準日との比較
 --------------------------------------------------------------------- */
 
-function renderBaseline() {
-  const baselineDate = (state.latest && state.latest.baseline_date) ||
-    (state.baseline && state.baseline.date);
-  const entry = state.baseline && state.baseline.series && state.baseline.series.retail;
-  const price = currentPrice('retail');
+/** 系列から「指定日以前で最も新しい」点を返す。休場日を選んでも直前の営業日を使う。 */
+function lookupPoint(id, isoDate) {
+  const points = seriesPoints(id);
+  let found = null;
+  for (const point of points) {
+    if (point[0] > isoDate) break;
+    found = point;
+  }
+  return found;
+}
 
-  $('baseline-date-label').textContent = formatDate(baselineDate);
-  $('legend-base-date').textContent = formatDate(baselineDate);
+function readStoredBaseline() {
+  try {
+    return localStorage.getItem(CONFIG.baselineStorageKey);
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeStoredBaseline(value) {
+  try {
+    if (value) localStorage.setItem(CONFIG.baselineStorageKey, value);
+    else localStorage.removeItem(CONFIG.baselineStorageKey);
+  } catch (error) {
+    /* プライベートモードなどでは保存できないが、表示はそのまま続ける */
+  }
+}
+
+/** データの最終日。基準日の上限と、クイック選択の起点に使う。 */
+function latestDataDate() {
+  return currentDate('retail') || currentDate('market') || null;
+}
+
+/**
+ * まだ何も選ばれていないときの基準日。
+ * 店頭価格の履歴より前にならないよう丸め、既定では店頭価格どうしで比較できるようにする。
+ */
+function defaultBaselineDate() {
+  const end = latestDataDate();
+  if (!end) return null;
+  const wanted = shiftDays(end, -CONFIG.defaultBaselineDays);
+  const retailPoints = seriesPoints('retail');
+  const earliestRetail = retailPoints.length ? retailPoints[0][0] : null;
+  return earliestRetail && wanted < earliestRetail ? earliestRetail : wanted;
+}
+
+/** いま使っている基準日。 */
+function activeBaselineDate() {
+  return state.baselineDate || defaultBaselineDate();
+}
+
+/** 基準日を変更して関係する表示だけ描き直す。 */
+function setBaselineDate(value) {
+  state.baselineDate = value || null;
+  writeStoredBaseline(value);
+  renderBaseline();
+  renderBaselinePresets();
+  renderChart();
+}
+
+function renderBaselinePresets() {
+  const container = $('baseline-presets');
+  const end = latestDataDate();
+  const active = activeBaselineDate();
+
+  container.innerHTML = CONFIG.baselinePresets.map((preset) => {
+    const date = end ? shiftDays(end, -preset.days) : '';
+    return '<button type="button" class="seg__item" data-date="' + date + '" aria-selected="' +
+      (Boolean(date) && date === active) + '">' + escapeHtml(preset.label) + '</button>';
+  }).join('');
+
+  container.querySelectorAll('.seg__item').forEach((button) => {
+    button.addEventListener('click', () => setBaselineDate(button.dataset.date));
+  });
+}
+
+function renderBaseline() {
+  const chosen = activeBaselineDate();
+  const deltaEl = $('baseline-delta');
+
+  const marketPoints = seriesPoints('market');
+  const retailPoints = seriesPoints('retail');
+  const earliest = (marketPoints.length && marketPoints[0][0]) ||
+    (retailPoints.length && retailPoints[0][0]) || '';
+
+  const input = $('baseline-input');
+  input.value = chosen || '';
+  input.min = earliest;
+  input.max = latestDataDate() || '';
+
+  // 店頭小売価格で比べる。店頭価格の履歴より前を選んだ場合だけ市場価格で比べる。
+  let seriesId = 'retail';
+  let point = chosen ? lookupPoint('retail', chosen) : null;
+  if (!point && chosen) {
+    point = lookupPoint('market', chosen);
+    seriesId = 'market';
+  }
+  const price = point ? currentPrice(seriesId) : null;
+
+  $('baseline-date-label').textContent = formatDate(point ? point[0] : chosen);
+  $('legend-base-date').textContent = point ? formatDate(point[0]) : '--';
   $('baseline-current').textContent = formatNumber(price);
 
-  const deltaEl = $('baseline-delta');
-  if (!entry || typeof price !== 'number') {
+  if (!point || typeof price !== 'number') {
     $('baseline-price').textContent = '--';
     $('baseline-diff').textContent = '--';
     $('baseline-rate').textContent = '';
     deltaEl.className = 'delta is-flat';
-    $('baseline-note').textContent = '基準日のデータが見つかりません。';
+    $('baseline-note').textContent = chosen
+      ? formatDate(chosen) + ' より前のデータはありません。' + formatDate(earliest) + ' 以降の日付を選んでください。'
+      : '基準日を選んでください。';
     return;
   }
 
-  const diff = price - entry.price;
-  const rate = (diff / entry.price) * 100;
+  const diff = price - point[1];
+  const rate = (diff / point[1]) * 100;
 
-  $('baseline-price').textContent = formatNumber(entry.price);
+  $('baseline-price').textContent = formatNumber(point[1]);
   $('baseline-diff').textContent = formatSigned(diff) + ' 円/g';
   $('baseline-rate').textContent = formatSigned(rate, 1) + '%';
   deltaEl.className = 'delta ' + (diff > 0 ? 'is-up' : diff < 0 ? 'is-down' : 'is-flat');
 
-  const marketBase = state.baseline.series.market;
-  const marketNow = currentPrice('market');
-  let note = '基準日・現在価格とも ' +
-    ((latestOf('retail') && latestOf('retail').price_type) || '店頭小売価格（税込）') + 'で比較しています。';
-  if (marketBase && typeof marketNow === 'number') {
-    const marketDiff = marketNow - marketBase.price;
-    const marketRate = (marketDiff / marketBase.price) * 100;
-    note += '市場価格（税抜）では ' + formatNumber(marketBase.price) + ' 円/g → ' +
-      formatNumber(marketNow) + ' 円/g（' + formatSigned(marketRate, 1) + '%）。';
+  const series = seriesOf(seriesId);
+  const notes = ['基準日・現在価格とも ' + ((series && series.label) || seriesId) + ' で比較しています。'];
+  if (point[0] !== chosen) {
+    notes.push(formatDate(chosen) + ' は休場のため、直前の ' + formatDate(point[0]) + ' の価格を使っています。');
   }
-  $('baseline-note').textContent = note;
+  if (seriesId === 'market') {
+    notes.push('選んだ日付は店頭価格の履歴より前のため、市場価格（税抜）で比較しています。');
+  }
+  $('baseline-note').textContent = notes.join(' ');
 }
 
 /* ---------------------------------------------------------------------
@@ -631,9 +735,9 @@ function renderChart() {
   }
 
   const points = downsample(raw, CONFIG.maxChartPoints);
-  const baselineDate = (state.latest && state.latest.baseline_date) || null;
-  const baselineEntry = state.baseline && state.baseline.series && state.baseline.series[resolved.id];
-  const baselinePrice = baselineEntry ? baselineEntry.price : null;
+  const basePoint = lookupPoint(resolved.id, activeBaselineDate() || '');
+  const baselineDate = basePoint ? basePoint[0] : null;
+  const baselinePrice = basePoint ? basePoint[1] : null;
 
   const left = 6;
   const right = 300;
@@ -927,6 +1031,7 @@ function renderAll() {
   renderBanner();
   renderHero();
   renderBaseline();
+  renderBaselinePresets();
   renderRank();
   renderChart();
   renderCalc();
@@ -973,6 +1078,9 @@ async function init() {
   buildSeriesSelect();
   buildCalcControls();
   setupChartCursor();
+
+  state.baselineDate = readStoredBaseline();
+  $('baseline-input').addEventListener('change', (event) => setBaselineDate(event.target.value));
 
   renderAll();
 

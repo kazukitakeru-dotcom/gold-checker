@@ -7,11 +7,6 @@ on:
     # LBMA の PM 建値（15:00 ロンドン時間）の公表後。UTC 16:30 = 翌 JST 01:30
     - cron: '30 16 * * 1-5'
   workflow_dispatch:
-    inputs:
-      rebuild_baseline:
-        description: '基準日データを作り直す'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -39,12 +34,7 @@ jobs:
         run: python scripts/test_update.py
 
       - name: 価格データを取得・検証・更新
-        run: |
-          if [ "${{ inputs.rebuild_baseline }}" = "true" ]; then
-            python scripts/update_prices.py --rebuild-baseline
-          else
-            python scripts/update_prices.py
-          fi
+        run: python scripts/update_prices.py
 
       - name: 変更があればコミットする
         run: |

@@ -4,7 +4,6 @@
 使い方:
     python scripts/update_prices.py                    # 通常更新
     python scripts/update_prices.py --dry-run          # ファイルを書かずに結果だけ表示
-    python scripts/update_prices.py --rebuild-baseline # 基準日データを作り直す
 
 設計方針:
     * 取得元ごとの処理は scripts/providers/ に分離してある。
@@ -34,11 +33,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(ROOT, "data")
 HISTORY_PATH = os.path.join(DATA_DIR, "history.json")
 LATEST_PATH = os.path.join(DATA_DIR, "latest.json")
-BASELINE_PATH = os.path.join(DATA_DIR, "baseline.json")
-
-# アプリの固定基準日。
-BASELINE_DATE = "2026-02-20"
-BASELINE_LABEL = "2026年2月20日"
+# 基準日はアプリ側（script.js）でユーザーが選ぶ設定なので、ここでは扱わない。
 
 # 為替が公表されない日に、直前のレートを何日まで流用するか。
 FX_FORWARD_FILL_DAYS = 7
@@ -186,34 +181,6 @@ def public_meta(meta):
     }
 
 
-def build_baseline(retail, market, market_details, now):
-    """基準日（固定）の価格を切り出して保存する。"""
-    entry = {}
-
-    if BASELINE_DATE in retail:
-        entry["retail"] = {"price": int(retail[BASELINE_DATE]), "date": BASELINE_DATE}
-    if BASELINE_DATE in market:
-        detail = market_details.get(BASELINE_DATE, {})
-        entry["market"] = {
-            "price": round(market[BASELINE_DATE], 1),
-            "date": BASELINE_DATE,
-            "usd_per_ounce": detail.get("usd_per_ounce"),
-            "jpy_per_usd": detail.get("jpy_per_usd"),
-        }
-
-    if not entry:
-        print("[warn] 基準日 " + BASELINE_DATE + " のデータが見つかりませんでした")
-        return None
-
-    return {
-        "date": BASELINE_DATE,
-        "label": BASELINE_LABEL,
-        "fixed": True,
-        "captured_at": now.isoformat(timespec="seconds"),
-        "series": entry,
-    }
-
-
 # --------------------------------------------------------------------------
 # メイン処理
 # --------------------------------------------------------------------------
@@ -221,9 +188,6 @@ def build_baseline(retail, market, market_details, now):
 def main():
     parser = argparse.ArgumentParser(description="金価格データを更新する")
     parser.add_argument("--dry-run", action="store_true", help="ファイルを書き込まない")
-    parser.add_argument(
-        "--rebuild-baseline", action="store_true", help="基準日データを作り直す"
-    )
     args = parser.parse_args()
 
     now = datetime.now(JST)
@@ -331,7 +295,6 @@ def main():
 
     history_payload = {
         "generated_at": now.isoformat(timespec="seconds"),
-        "baseline_date": BASELINE_DATE,
         "series": {"retail": retail_block, "market": market_block},
     }
 
@@ -343,23 +306,15 @@ def main():
     latest_payload = {
         "generated_at": now.isoformat(timespec="seconds"),
         "timezone": "Asia/Tokyo",
-        "baseline_date": BASELINE_DATE,
-        "baseline_label": BASELINE_LABEL,
         "series": {"retail": retail_latest, "market": market_latest},
         "errors": errors,
     }
-
-    baseline_payload = load_json(BASELINE_PATH)
-    if baseline_payload is None or args.rebuild_baseline:
-        baseline_payload = build_baseline(retail_history, market_history, market_details, now)
 
     if args.dry_run:
         print(json.dumps(latest_payload, ensure_ascii=False, indent=2))
     else:
         write_json(HISTORY_PATH, history_payload)
         write_json(LATEST_PATH, latest_payload)
-        if baseline_payload:
-            write_json(BASELINE_PATH, baseline_payload)
 
     for message in warnings[:20]:
         print("[warn] " + message)

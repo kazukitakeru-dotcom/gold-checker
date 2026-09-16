@@ -162,7 +162,7 @@ def test_tanaka_parsers(monkey_html_latest: str, monkey_html_daily: str) -> None
 
         tanaka.fetch_text = lambda url, **kwargs: monkey_html_daily
         history = tanaka.fetch_daily_retail_history()
-        check(history.get("2026-02-20") == 27503, "基準日 2026-02-20 の値を読み取れる")
+        check(history.get("2026-02-20") == 27503, "日次表から特定日の値を読み取れる")
         check(len(history) > 100, "日次表から十分な件数を読み取れる")
         check(all(len(key) == 10 for key in history), "日付キーが YYYY-MM-DD 形式")
 

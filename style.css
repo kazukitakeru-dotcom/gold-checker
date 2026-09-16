@@ -635,6 +635,35 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 基準日の入力 */
+.date-field input[type="date"] {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.date-field input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(0.72);
+}
+
+.seg--compact { margin-bottom: 12px; }
+
+.seg--compact .seg__item {
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 11.5px;
+}
+
 .chart__wrap { position: relative; margin: 0 -4px; touch-action: pan-y; }
 .chart__wrap svg { display: block; width: 100%; height: auto; }
 
